@@ -714,13 +714,13 @@ class EltBitFrequencyTable:
 
         # Fill bits at correct locations
         for i in range(0, field_num_bytes):
-            if isinstance(field, bytes):
-                print(field[i])
-                print(type(field[i]))
-                field[i] = list(field[i].to_bytes(2, byteorder="big"))
+            # if isinstance(field, bytes):
+            #    print(field[i])
+            #    print(type(field[i]))
+            #    field[i] = list(field[i].to_bytes(2, byteorder="big"))
 
-            print(field[i])
-            print(type(field[i]))
+            # print(field[i])
+            # print(type(field[i]))
             self.add_byte(tag, i, field[i])
 
         # Fill empty spaces with 'x'
