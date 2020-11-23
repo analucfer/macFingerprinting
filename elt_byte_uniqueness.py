@@ -672,6 +672,10 @@ def determine_max_bits_per_elt(dataset):
     return result
 
 
+def unicode_to_byte(point):
+    return ord(point).to_bytes(1, "big")  # Big endian encoding
+
+
 class EltBitFrequencyTable:
     def __init__(self, maximum_bits_per_elt):
         self.data = {}
@@ -799,10 +803,6 @@ class EltBitFrequencyTable:
 
             self.visualize(name='variability.pdf')
 
-    @staticmethod
-    def unicode_to_byte(point):
-        return ord(point).to_bytes(1, "big")  # Big endian encoding
-
     def test(self):
         self.clear()
         self.maximum_bits_per_elt[b'\x00'] = 3 * 8
@@ -922,8 +922,8 @@ class EltBitFrequencyTable:
             control = control_tristate
 
         for elem in test_data:
-            elemZeroBytes = list(map(self.unicode_to_byte, elem[0]))[0]
-            elemBytes = list(map(self.unicode_to_byte, elem))
+            elemZeroBytes = list(map(unicode_to_byte, elem[0]))[0]
+            elemBytes = list(map(unicode_to_byte, elem))
             self.add_field(elemZeroBytes, elemBytes)
         errors = 0
 
@@ -1005,18 +1005,7 @@ def do_experiment_1(dataset):
             continue  # Go to next probe so that one prevalent MAC can't bias the results
 
         for field_tuple in r.fields:
-            ## TODO: MANDAR FIELD_TUPLE[0] Y [1] COMO TIPO BYTE, EN VEZ DE STRING
-            # print(field_tuple[0])
-            # print(type(field_tuple[0]))
-            # print(type(field_tuple[0].encode()))
-            # print(bytes(field_tuple[0], 'utf-8'))
-            # print(type(bytes(field_tuple[0], 'utf-8')))
-            # print(field_tuple[1])
-            # print(type(field_tuple[1]))
-            # print(type(field_tuple[1].encode()))
-            # print(bytes(field_tuple[1], 'utf-8'))
-            # print(type(bytes(field_tuple[1], 'utf-8')))
-            frequencies.add_field(bytes(field_tuple[0], 'utf-8'), bytes(field_tuple[1], 'utf-8'))
+            frequencies.add_field(field_tuple[0], list(map(unicode_to_byte, eval(field_tuple[1].replace('b', "")))))
 
         # Ignore this MAC in the future
         processed_macs.add(r.mac_addr)
