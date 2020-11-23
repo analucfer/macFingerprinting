@@ -3,58 +3,31 @@
 # License: GNU GENERAL PUBLIC LICENSE, Version 3, 29 June 2007
 # See LICENSE in this Git repository for the full license description
 
-from pymongo import ASCENDING, DESCENDING, MongoClient
-from bson.binary import Binary
-from scapy.layers import dot11
-from scapy.all import Raw
+from pymongo import MongoClient
 from scapy.fields import *
-from scapy_tags import *
-from scapy.layers.dot11 import Dot11Elt, Dot11, Dot11ProbeReq, RadioTap
+from macfingerprinting.scapy_tags import *
+from scapy.layers.dot11 import Dot11Elt, Dot11, RadioTap
 from prettytable import PrettyTable
 from bson.objectid import ObjectId
 from collections import defaultdict
 from netaddr import *
 from random import shuffle
-from pprint import pprint
 import numpy as np
-import plotting
+from macfingerprinting import plotting
 import scapy
-import string
-import bson
 import sys
 import time
 import struct
 import datetime
 import hashlib
-import itertools
 import binascii
 import math
 import locale
 import argparse
 
-# Research center data: mac_research
-# Glimps 2015 data: mac_info
-arg_parser = argparse.ArgumentParser(description="Advanced MAC layer fingerprinter for Probe Request frames",
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-arg_parser.add_argument('type', choices=['mongodb', 'file', 'pcap'])
-arg_parser.add_argument('name', help='The path to / name of the dataset containing Probe Requests',
-                        choices=['mac_info', 'mac_research'])
-arg_parser.add_argument('--host', dest='host', help='MongoDB host', default='localhost')
-arg_parser.add_argument('--debug', '-d', dest='debug', help='Debug mode', action='store_true')
-arg_parser.add_argument('--big-endian', dest='be', help='Big Endian Radiotap header', action='store_true')
-arg_parser.add_argument('--train-samples', dest='num_train_samples', help='Number of training samples', type=int,
-                        default=30000)
-arg_parser.add_argument('--test-samples', dest='num_test_samples', help='Number of test samples', type=int, default=50)
-arg_parser.add_argument('--threshold', dest='threshold', help='Stability threshold', type=float, default=0.3)
-args = arg_parser.parse_args()
-
-if args.name == "mac_info":
-    USE_RESEARCH_DATA = False
-else:
-    USE_RESEARCH_DATA = True
-
-NUM_SAMPLES = args.num_train_samples
-NUM_SAMPLES_TEST = args.num_test_samples  # Number of MACs to fingerprint
+USE_RESEARCH_DATA = True
+NUM_SAMPLES = 30000
+NUM_SAMPLES_TEST = 50
 NUM_SAMPLES_VARIABILITY = NUM_SAMPLES  # Number of MACs to analyze for variability
 NUM_SAMPLES_STABILITY = NUM_SAMPLES  # Number of MACs to analyze for stability
 HASH_PRINT_CUTOFF = 12  # Number of characters of hash to display
@@ -62,7 +35,6 @@ USE_HAMMING = False
 HAMMING_TOLERANCE_STABLE = 8  # Tolerance for stable bits
 HAMMING_TOLERANCE_UNSTABLE = 16  # Tolerance for unstable bits
 THRESHOLD_VARIABILITY = 0.0
-THRESHOLD_STABILITY = args.threshold  # Delete bits with entropy < v. Extreme: THRESHOLD_STABILITY = 1.0. Good value without MHEADER: 0.3
 FILTERING_APPROACH = True  # Use filtering approach
 USE_TRISTATE = True
 GRAPHS = False  # Show graphs
@@ -84,7 +56,6 @@ locale.setlocale(locale.LC_ALL, 'en_US.utf-8')
 # Dot11Elt.fields_desc = [ByteEnumField("ID", 0, elt_id_map),
 #                         FieldLenField("len", None, "info", "B"),
 #                         StrLenField("info", "", length_from=lambda x: x.len)]
-
 
 def locale_number(number):
     return locale.format("%d", number, grouping=True)
@@ -803,165 +774,6 @@ class EltBitFrequencyTable:
     def unicode_to_byte(point):
         return ord(point).to_bytes(1, "big")  # Big endian encoding
 
-    def test(self):
-        self.clear()
-        self.maximum_bits_per_elt[b'\x00'] = 3 * 8
-        self.maximum_bits_per_elt[b'\x01'] = 2 * 8
-        test_data = [
-            "\x00\x80",
-            "\x00\x00",
-            "\x00\x00",
-            "\x00\x01",
-            "\x00\x01",
-            "\x00\x01",
-            "\x01\x01",
-            "\x00\x00\x03",
-        ]
-        control = {
-            b'\x00': [
-                # Byte 0
-                "0000000",  # 0
-                "0000000",  # 1
-                "0000000",  # 2
-                "0000000",  # 3
-                "0000000",  # 4
-                "0000000",  # 5
-                "0000000",  # 6
-                "0000000",  # 7
-                # Byte 1
-                "1000000",  # 0
-                "0000000",  # 1
-                "0000000",  # 2
-                "0000000",  # 3
-                "0000000",  # 4
-                "0000000",  # 5
-                "0000000",  # 6
-                "0001110",  # 7
-                # Byte 3
-                "0",  # 0
-                "0",  # 1
-                "0",  # 2
-                "0",  # 3
-                "0",  # 4
-                "0",  # 5
-                "1",  # 6
-                "1",  # 7
-            ],
-            b'\x01': [
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "1",
-                #
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "1",
-            ]
-        }
-        control_tristate = {
-            b'\x00': [
-                # Byte 0
-                "0000000",  # 0
-                "0000000",  # 1
-                "0000000",  # 2
-                "0000000",  # 3
-                "0000000",  # 4
-                "0000000",  # 5
-                "0000000",  # 6
-                "0000000",  # 7
-                # Byte 1
-                "1000000",  # 0
-                "0000000",  # 1
-                "0000000",  # 2
-                "0000000",  # 3
-                "0000000",  # 4
-                "0000000",  # 5
-                "0000000",  # 6
-                "0001110",  # 7
-                # Byte 3
-                "xxxxxx0",  # 0
-                "xxxxxx0",  # 1
-                "xxxxxx0",  # 2
-                "xxxxxx0",  # 3
-                "xxxxxx0",  # 4
-                "xxxxxx0",  # 5
-                "xxxxxx1",  # 6
-                "xxxxxx1",  # 7
-            ],
-            b'\x01': [
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "1",
-                #
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "1",
-            ]
-        }
-
-        if USE_TRISTATE:
-            control = control_tristate
-
-        for elem in test_data:
-            elemZeroBytes = list(map(self.unicode_to_byte, elem[0]))[0]
-            elemBytes = list(map(self.unicode_to_byte, elem))
-            self.add_field(elemZeroBytes, elemBytes)
-        errors = 0
-
-        # Check values
-        for key in control:
-            # keyBytes = bytes(key, 'utf-8')
-            byte_array = control[key]
-            for byte_idx in range(0, len(byte_array)):
-                bit_array = byte_array[byte_idx]
-                for bit_idx in range(0, len(bit_array)):
-                    if bit_array[bit_idx] != self.data[key][byte_idx][bit_idx]:
-                        errors += 1
-
-        if errors > 0:
-            print("Unit test EltBitFrequencyTable failed with " + str(errors) + " errors")
-            print("Got:")
-            print(self.data)
-            print("Expected:")
-            print(control)
-            exit()
-        self.clear()
-
-
-# Preliminary stuff
-t = EltBitFrequencyTable([])
-t.test()
-# Get objects from database
-if USE_RESEARCH_DATA:
-    from_time = datetime.datetime(2016, 1, 28, 15, 0, 0)
-    to_time = datetime.datetime(2016, 2, 8, 12, 0, 0)
-else:
-    from_time = datetime.datetime(2015, 12, 10, 0, 0, 0)  # -     datetime.timedelta(mins=mins)
-    to_time = datetime.datetime(2015, 12, 12, 23, 59, 59)  # - datetime.timedelta(mins=mins)
-# from_time = datetime.datetime(2013, 1, 1)
-from_dummy_id = ObjectId.from_datetime(from_time)
-to_dummy_id = ObjectId.from_datetime(to_time)
-db = MongoHandler(from_dummy_id, to_dummy_id)
-
 
 def field_str(pkt, attr):
     fld, v = pkt.getfield_and_val(attr)
@@ -1252,15 +1064,6 @@ def hamming_distance_bytes(byte_array_1, byte_array_2):
     return hamming_distance_bits(bs1, bs2)
 
 
-assert (hamming_distance_bits("101", "1") == 2)
-assert (hamming_distance_bits("1010", "1010") == 0)
-assert (hamming_distance_bits("1010", "1011") == 1)
-assert (hamming_distance_bits("1011", "1010") == 1)
-assert (hamming_distance_bits("0", "1010") == 4)
-assert (hamming_distance_bits("1", "1010") == 3)
-assert (hamming_distance_bytes(b"\x01", b"\x00") == 1)
-
-
 # Is it a locally administered (random) MAC?
 def is_locally_administered_mac(mac_addr):
     # MAC address is stored as a string
@@ -1539,7 +1342,44 @@ def merge_heatmap_tables(table_list, output):
             f.write(line + "\\\\\n")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
+    # Research center data: mac_research
+    # Glimps 2015 data: mac_info
+    arg_parser = argparse.ArgumentParser(description="Advanced MAC layer fingerprinter for Probe Request frames",
+                                         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    arg_parser.add_argument('type', choices=['mongodb', 'file', 'pcap'])
+    arg_parser.add_argument('name', help='The path to / name of the dataset containing Probe Requests',
+                            choices=['mac_info', 'mac_research'])
+    arg_parser.add_argument('--host', dest='host', help='MongoDB host', default='localhost')
+    arg_parser.add_argument('--debug', '-d', dest='debug', help='Debug mode', action='store_true')
+    arg_parser.add_argument('--big-endian', dest='be', help='Big Endian Radiotap header', action='store_true')
+    arg_parser.add_argument('--train-samples', dest='num_train_samples', help='Number of training samples', type=int,
+                            default=30000)
+    arg_parser.add_argument('--test-samples', dest='num_test_samples', help='Number of test samples', type=int,
+                            default=50)
+    arg_parser.add_argument('--threshold', dest='threshold', help='Stability threshold', type=float, default=0.3)
+    args = arg_parser.parse_args()
+
+    if args.name == "mac_info":
+        USE_RESEARCH_DATA = False
+    else:
+        USE_RESEARCH_DATA = True
+    NUM_SAMPLES = args.num_train_samples
+    NUM_SAMPLES_TEST = args.num_test_samples  # Number of MACs to fingerprint
+    THRESHOLD_STABILITY = args.threshold  # Delete bits with entropy < v. Extreme: THRESHOLD_STABILITY = 1.0. Good value without MHEADER: 0.3
+
+    # Get objects from database
+    if USE_RESEARCH_DATA:
+        from_time = datetime.datetime(2016, 1, 28, 15, 0, 0)
+        to_time = datetime.datetime(2016, 2, 8, 12, 0, 0)
+    else:
+        from_time = datetime.datetime(2015, 12, 10, 0, 0, 0)  # -     datetime.timedelta(mins=mins)
+        to_time = datetime.datetime(2015, 12, 12, 23, 59, 59)  # - datetime.timedelta(mins=mins)
+    # from_time = datetime.datetime(2013, 1, 1)
+    from_dummy_id = ObjectId.from_datetime(from_time)
+    to_dummy_id = ObjectId.from_datetime(to_time)
+    db = MongoHandler(from_dummy_id, to_dummy_id)
+
     # Set to True to count number of unique probes in dataset
     if False:
         print("Counting number of unique probes in dataset")
