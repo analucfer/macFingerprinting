@@ -918,22 +918,6 @@ class EltBitFrequencyTable:
         self.clear()
 
 
-# Preliminary stuff
-t = EltBitFrequencyTable([])
-t.test()
-# Get objects from database
-if USE_RESEARCH_DATA:
-    from_time = datetime.datetime(2016, 1, 28, 15, 0, 0)
-    to_time = datetime.datetime(2016, 2, 8, 12, 0, 0)
-else:
-    from_time = datetime.datetime(2015, 12, 10, 0, 0, 0)  # -     datetime.timedelta(mins=mins)
-    to_time = datetime.datetime(2015, 12, 12, 23, 59, 59)  # - datetime.timedelta(mins=mins)
-# from_time = datetime.datetime(2013, 1, 1)
-from_dummy_id = ObjectId.from_datetime(from_time)
-to_dummy_id = ObjectId.from_datetime(to_time)
-db = MongoHandler(from_dummy_id, to_dummy_id)
-
-
 def field_str(pkt, attr):
     fld, v = pkt.getfield_and_val(attr)
     return fld.i2repr(pkt, v)
@@ -1524,6 +1508,10 @@ if __name__ == '__main__':
     NUM_SAMPLES = args.num_train_samples
     NUM_SAMPLES_TEST = args.num_test_samples  # Number of MACs to fingerprint
     THRESHOLD_STABILITY = args.threshold  # Delete bits with entropy < v. Extreme: THRESHOLD_STABILITY = 1.0. Good value without MHEADER: 0.3
+
+    # Preliminary stuff
+    t = EltBitFrequencyTable([])
+    t.test()
 
     # Get objects from database
     if USE_RESEARCH_DATA:
