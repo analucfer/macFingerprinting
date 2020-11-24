@@ -6,7 +6,7 @@ import numpy as np
 import numpy.random
 import matplotlib.pyplot as plt
 import os
-from scapy_tags import *
+from macfingerprinting.scapy_tags import *
 
 TAG_CAPA_ORDER = 253  # Custom element
 TAG_MAC_FRAME = 254

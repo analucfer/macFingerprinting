@@ -3,58 +3,31 @@
 # License: GNU GENERAL PUBLIC LICENSE, Version 3, 29 June 2007
 # See LICENSE in this Git repository for the full license description
 
-from pymongo import ASCENDING, DESCENDING, MongoClient
-from bson.binary import Binary
-from scapy.layers import dot11
-from scapy.all import Raw
+from pymongo import MongoClient
 from scapy.fields import *
-from scapy_tags import *
-from scapy.layers.dot11 import Dot11Elt, Dot11, Dot11ProbeReq, RadioTap
+from macfingerprinting.scapy_tags import *
+from scapy.layers.dot11 import Dot11Elt, Dot11, RadioTap
 from prettytable import PrettyTable
 from bson.objectid import ObjectId
 from collections import defaultdict
 from netaddr import *
 from random import shuffle
-from pprint import pprint
 import numpy as np
-import plotting
+from macfingerprinting import plotting
 import scapy
-import string
-import bson
 import sys
 import time
 import struct
 import datetime
 import hashlib
-import itertools
 import binascii
 import math
 import locale
 import argparse
 
-# Research center data: mac_research
-# Glimps 2015 data: mac_info
-arg_parser = argparse.ArgumentParser(description="Advanced MAC layer fingerprinter for Probe Request frames",
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-arg_parser.add_argument('type', choices=['mongodb', 'file', 'pcap'])
-arg_parser.add_argument('name', help='The path to / name of the dataset containing Probe Requests',
-                        choices=['mac_info', 'mac_research'])
-arg_parser.add_argument('--host', dest='host', help='MongoDB host', default='localhost')
-arg_parser.add_argument('--debug', '-d', dest='debug', help='Debug mode', action='store_true')
-arg_parser.add_argument('--big-endian', dest='be', help='Big Endian Radiotap header', action='store_true')
-arg_parser.add_argument('--train-samples', dest='num_train_samples', help='Number of training samples', type=int,
-                        default=30000)
-arg_parser.add_argument('--test-samples', dest='num_test_samples', help='Number of test samples', type=int, default=50)
-arg_parser.add_argument('--threshold', dest='threshold', help='Stability threshold', type=float, default=0.3)
-args = arg_parser.parse_args()
-
-if args.name == "mac_info":
-    USE_RESEARCH_DATA = False
-else:
-    USE_RESEARCH_DATA = True
-
-NUM_SAMPLES = args.num_train_samples
-NUM_SAMPLES_TEST = args.num_test_samples  # Number of MACs to fingerprint
+USE_RESEARCH_DATA = True
+NUM_SAMPLES = 30000
+NUM_SAMPLES_TEST = 50
 NUM_SAMPLES_VARIABILITY = NUM_SAMPLES  # Number of MACs to analyze for variability
 NUM_SAMPLES_STABILITY = NUM_SAMPLES  # Number of MACs to analyze for stability
 HASH_PRINT_CUTOFF = 12  # Number of characters of hash to display
@@ -62,7 +35,6 @@ USE_HAMMING = False
 HAMMING_TOLERANCE_STABLE = 8  # Tolerance for stable bits
 HAMMING_TOLERANCE_UNSTABLE = 16  # Tolerance for unstable bits
 THRESHOLD_VARIABILITY = 0.0
-THRESHOLD_STABILITY = args.threshold  # Delete bits with entropy < v. Extreme: THRESHOLD_STABILITY = 1.0. Good value without MHEADER: 0.3
 FILTERING_APPROACH = True  # Use filtering approach
 USE_TRISTATE = True
 GRAPHS = False  # Show graphs
@@ -84,7 +56,6 @@ locale.setlocale(locale.LC_ALL, 'en_US.utf-8')
 # Dot11Elt.fields_desc = [ByteEnumField("ID", 0, elt_id_map),
 #                         FieldLenField("len", None, "info", "B"),
 #                         StrLenField("info", "", length_from=lambda x: x.len)]
-
 
 def locale_number(number):
     return locale.format("%d", number, grouping=True)
@@ -1528,7 +1499,44 @@ def merge_heatmap_tables(table_list, output):
             f.write(line + "\\\\\n")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
+    # Research center data: mac_research
+    # Glimps 2015 data: mac_info
+    arg_parser = argparse.ArgumentParser(description="Advanced MAC layer fingerprinter for Probe Request frames",
+                                         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    arg_parser.add_argument('type', choices=['mongodb', 'file', 'pcap'])
+    arg_parser.add_argument('name', help='The path to / name of the dataset containing Probe Requests',
+                            choices=['mac_info', 'mac_research'])
+    arg_parser.add_argument('--host', dest='host', help='MongoDB host', default='localhost')
+    arg_parser.add_argument('--debug', '-d', dest='debug', help='Debug mode', action='store_true')
+    arg_parser.add_argument('--big-endian', dest='be', help='Big Endian Radiotap header', action='store_true')
+    arg_parser.add_argument('--train-samples', dest='num_train_samples', help='Number of training samples', type=int,
+                            default=30000)
+    arg_parser.add_argument('--test-samples', dest='num_test_samples', help='Number of test samples', type=int,
+                            default=50)
+    arg_parser.add_argument('--threshold', dest='threshold', help='Stability threshold', type=float, default=0.3)
+    args = arg_parser.parse_args()
+
+    if args.name == "mac_info":
+        USE_RESEARCH_DATA = False
+    else:
+        USE_RESEARCH_DATA = True
+    NUM_SAMPLES = args.num_train_samples
+    NUM_SAMPLES_TEST = args.num_test_samples  # Number of MACs to fingerprint
+    THRESHOLD_STABILITY = args.threshold  # Delete bits with entropy < v. Extreme: THRESHOLD_STABILITY = 1.0. Good value without MHEADER: 0.3
+
+    # Get objects from database
+    if USE_RESEARCH_DATA:
+        from_time = datetime.datetime(2016, 1, 28, 15, 0, 0)
+        to_time = datetime.datetime(2016, 2, 8, 12, 0, 0)
+    else:
+        from_time = datetime.datetime(2015, 12, 10, 0, 0, 0)  # -     datetime.timedelta(mins=mins)
+        to_time = datetime.datetime(2015, 12, 12, 23, 59, 59)  # - datetime.timedelta(mins=mins)
+    # from_time = datetime.datetime(2013, 1, 1)
+    from_dummy_id = ObjectId.from_datetime(from_time)
+    to_dummy_id = ObjectId.from_datetime(to_time)
+    db = MongoHandler(from_dummy_id, to_dummy_id)
+
     # Set to True to count number of unique probes in dataset
     if False:
         print("Counting number of unique probes in dataset")
