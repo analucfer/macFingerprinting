@@ -569,10 +569,6 @@ class Dataset:
             shuffle(self.records)
         print("Dataset contains " + str(len(self.records)) + " records")
 
-    @staticmethod
-    def unicode_to_byte(point):
-        return ord(point).to_bytes(1, "big")  # Big endian encoding
-
     def add_to_record(self, r, raw_bytes):
         raw_bytes_len = len(raw_bytes)
 
@@ -621,7 +617,7 @@ class Dataset:
             elif type(layer) is scapy.layers.dot11.Dot11Elt:
                 elt_id = raw_bytes[0]
                 self.add_to_record(r, raw_bytes)
-                elt_order_bytes += list(map(self.unicode_to_byte, elt_id))[0]
+                elt_order_bytes += list(map(unicode_to_byte, elt_id))[0]
                 # elt_order_bytes += elt_id
 
             # Go to next layer
@@ -644,7 +640,9 @@ def determine_max_bits_per_elt(dataset):
 
 
 def unicode_to_byte(point):
-    return ord(point).to_bytes(1, "big")  # Big endian encoding
+    # return ord(point).to_bytes(1, "big")  # Big endian encoding
+    aux = sum([ord(i) for i in point]).to_bytes(1, "big")
+    return aux
 
 
 class EltBitFrequencyTable:
@@ -960,7 +958,8 @@ def do_experiment_1(dataset):
             continue  # Go to next probe so that one prevalent MAC can't bias the results
 
         for field_tuple in r.fields:
-            frequencies.add_field(field_tuple[0], list(map(unicode_to_byte, eval(field_tuple[1].replace('b', "")))))
+            # frequencies.add_field(field_tuple[0], list(map(unicode_to_byte, eval(field_tuple[1].replace("b", ""))))
+            frequencies.add_field(field_tuple[0], list(map(unicode_to_byte(field_tuple[1]))))
 
         # Ignore this MAC in the future
         processed_macs.add(r.mac_addr)
