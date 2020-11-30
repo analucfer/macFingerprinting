@@ -271,7 +271,7 @@ class FingerprintCollection:
                     fp.resolve(self.find_best_hash(fp.hash_occurrences.keys(), macs_per_fp))
 
     def find_best_hash(self, hash_collection, lookup_table):
-        best_td = sys.maxint
+        best_td = sys.maxsize
         best_id = None
         for fp_hash in hash_collection:
             our_timestamp = fp_hash.ts
@@ -645,6 +645,81 @@ def unicode_to_byte(point):
     return aux
 
 
+def aaa(point):
+    point = point[2:-1]
+    list_aux = []
+    if isinstance(point, bytes) is True:
+        point = point.decode('utf-8')
+    if point.find('\\') != -1:
+        point = point.split('\\')
+        list_bytes = [item.encode('utf-8') for item in point]
+        for i in range(len(list_bytes)):
+            if list_bytes[i].decode('utf-8') == '': #or list_bytes[i].decode('utf-8') == "'":
+                continue
+            try:
+                x_position = list_bytes[i].decode("utf-8").index("x")
+            except ValueError:
+                if len(list_bytes[i]) > 1:
+                    aux = list_bytes[i]
+                    aux = [("x" + format(ord(c), "x")).encode("utf-8") for c in aux.decode('utf-8')]
+                    for j in range(len(aux)):
+                        list_aux.append(aux[j])
+                    continue
+                else:
+                    list_aux.append(("x" + format(ord(list_bytes[i]), "x")).encode('utf-8'))
+                    continue
+            if x_position != 0:
+                aux = list_bytes[i][:x_position]
+                list_aux.append(list_bytes[i][x_position:])
+                aux = [("x" + format(ord(c), "x")).encode("utf-8") for c in aux.decode('utf-8')]
+                for j in range(len(aux)):
+                    list_aux.append(aux[j])
+            else:
+                if len(list_bytes[i]) > 3:
+                    aux = list_bytes[i][3:]
+                    list_aux.append(list_bytes[i][:3])
+                    aux = [("x" + format(ord(c), "x")).encode("utf-8") for c in aux.decode('utf-8')]
+                    for j in range(len(aux)):
+                        list_aux.append(aux[j])
+                else:
+                    list_aux.append(list_bytes[i])
+    else:
+        list_aux = [("x" + format(ord(c), "x")).encode("utf-8") for c in point]
+        # if list_bytes[i] == '':
+        #     list_bytes.pop(i)
+        #     len_list = len_list - 1
+        # try:
+        #     x_position = list_bytes[i].decode("utf-8").index("x")
+        # except ValueError:
+        #     if len(list_bytes[i]) > 1:
+        #         aux = list_bytes[i]
+        #         del(list_bytes[i])
+        #         len_list = len_list - 1
+        #         aux = [("x" + format(ord(c), "x")).encode("utf-8") for c in aux.decode('utf-8')]
+        #         for k in range(len(aux)):
+        #             list_bytes.insert(i + k, aux[k])
+        #         len_list = len_list + len(aux)
+        #     else:
+        #         list_bytes[i] = ("x" + format(ord(list_bytes[i]), "x")).encode('utf-8')
+        #     continue
+        # if x_position != 0:
+        #     aux1 = list_bytes[i][:x_position]
+        #     list_bytes[i] = list_bytes[i][x_position:]
+        #     aux1 = [("x" + format(ord(c), "x")).encode("utf-8") for c in aux1.decode('utf-8')]
+        #     for j in range(len(aux1)):
+        #         list_bytes.insert(i+j, aux1[j])
+        # else:
+        #     if len(list_bytes[i]) > 3:
+        #         aux2 = list_bytes[i][3:]
+        #         list_bytes[i] = list_bytes[i][:3]
+        #         aux2 = [("x" + format(ord(c), "x")).encode("utf-8") for c in aux2.decode('utf-8')]
+        #         for l in range(len(aux2)):
+        #             list_bytes.insert(i+l, aux2[j])
+        #is False and list_bytes[i].decode('utf-8'))[0] != "x":
+            #list_bytes[i] = "x" + format(ord(list_bytes[i]), "x")
+    return list_aux
+
+
 class EltBitFrequencyTable:
     def __init__(self, maximum_bits_per_elt):
         self.data = {}
@@ -687,13 +762,6 @@ class EltBitFrequencyTable:
 
         # Fill bits at correct locations
         for i in range(0, field_num_bytes):
-            # if isinstance(field, bytes):
-            #    print(field[i])
-            #    print(type(field[i]))
-            #    field[i] = list(field[i].to_bytes(2, byteorder="big"))
-
-            # print(field[i])
-            # print(type(field[i]))
             self.add_byte(tag, i, field[i])
 
         # Fill empty spaces with 'x'
@@ -746,10 +814,15 @@ class EltBitFrequencyTable:
 
         for elt_id in self.data:
             # Human readable elt_id?
-            name = human_readable_elt(ord(elt_id))
+            if isinstance(elt_id, int) is False:
+                int_id = ord(elt_id)
+            else:
+                int_id = elt_id
+
+            name = human_readable_elt(int_id)
             if name == "Nonexistent":
-                if ord(elt_id) < 253 or ord(elt_id) == 254 or ord(elt_id) == 255:
-                    print("Warning: non-existent elt_id " + str(ord(elt_id)))
+                if int_id < 253 or int_id == 254 or int_id == 255:
+                    print("Warning: non-existent elt_id " + str(int_id))
                     continue
 
             # Generate row
@@ -762,7 +835,7 @@ class EltBitFrequencyTable:
                 row[i + 1] = prob  # +1 since first row is the elem name
 
             print_table.add_row(row)
-            self.probability_matrix[ord(elt_id)] = row[1:]
+            self.probability_matrix[int_id] = row[1:]
             self.rows += 1
 
         if display:
@@ -926,7 +999,8 @@ def print_status(done, total):
 
     current_time = time.time()
     if int(current_time * 10) > int(last_time * 10):
-        print("\r%d / %d                                             " % (done, total)),
+        print("\r%d / %d                                             " % (done, total), sep=' ', end='', flush=True),
+        # print("\r%d / %d                                             " % (done, total)),
         sys.stdout.flush()
     last_time = current_time
 
@@ -958,8 +1032,9 @@ def do_experiment_1(dataset):
             continue  # Go to next probe so that one prevalent MAC can't bias the results
 
         for field_tuple in r.fields:
-            # frequencies.add_field(field_tuple[0], list(map(unicode_to_byte, eval(field_tuple[1].replace("b", ""))))
-            frequencies.add_field(field_tuple[0], list(map(unicode_to_byte(field_tuple[1]))))
+            # frequencies.add_field(field_tuple[0], list(map(unicode_to_byte, eval(field_tuple[1].replace("b'", ""))))
+            # frequencies.add_field(field_tuple[0], list(map(unicode_to_byte(field_tuple[1]))))
+            frequencies.add_field(field_tuple[0], aaa(field_tuple[1]))
 
         # Ignore this MAC in the future
         processed_macs.add(r.mac_addr)
@@ -999,7 +1074,8 @@ def calculate_average_frequency_table(frequency_tables):
     # in a list.
     for i in range(0, len(frequency_tables)):
         probability_matrix = frequency_tables[i].probability_matrix
-        for key in probability_matrix.keys():
+#        for key in probability_matrix.keys(): no funciona en Python 3
+        for key in list(probability_matrix):
             temp[key].append(pad_list(probability_matrix[key], max_cols))
             del frequency_tables[i].probability_matrix[key]
 
@@ -1087,7 +1163,7 @@ def do_experiment_2(dataset):
 
         frequencies = EltBitFrequencyTable(maximum_bits_per_elt)
         for field_tuple in filtered_fields:
-            frequencies.add_field(field_tuple[0], field_tuple[1])
+            frequencies.add_field(field_tuple[0], aaa(field_tuple[1]))
 
         # Calculate bit probability matrix and add table to frequencies
         frequencies.analyze_elt_id_uniqueness(display=False)
@@ -1112,7 +1188,8 @@ def do_experiment_2(dataset):
 # bits should be most suitable for use in a fingerprint
 def optimal_fingerprinting_bits(stab_prob, vari_prob, filtering_approach=FILTERING_APPROACH):
     result = {}
-    np.set_printoptions(threshold=np.nan)
+    # np.set_printoptions(threshold=np.nan)
+    np.set_printoptions(threshold=sys.maxsize)
 
     for key in vari_prob.probability_matrix:
         try:
@@ -1234,16 +1311,23 @@ def calculate_fingerprint_efficiency(dataset, mask, unstable_elt_ids):
         # For every element ID, check if we have a bit mask.
         # If so, apply it and add the resulting bits to the fingerprint
         for field_tuple in r.fields:
-            field_id_int = ord(field_tuple[0])
-            raw_ie_bytes = field_tuple[1]
+            if isinstance(field_tuple[0], int) is False:
+                field_id_int = ord(field_tuple[0])
+            else:
+                field_id_int = field_tuple[0]
+            field_tuple1_aux = field_tuple[1][2:-1]
+            if isinstance(field_tuple1_aux, bytes) is True:
+                raw_ie_bytes = field_tuple1_aux
+            else:
+                raw_ie_bytes = field_tuple1_aux.encode('utf-8')
 
             if field_id_int in mask:
                 bits = bytes_to_bit_array(raw_ie_bytes)
-                bit_array = np.frombuffer(bits, dtype='uint8', count=len(bits), offset=0)
+                bit_array = np.frombuffer(bits.encode('utf-8'), dtype='uint8', count=len(bits), offset=0)
                 mask_relevant = mask[field_id_int][0:len(bits)]
                 sub_bits = bit_array[mask_relevant].tostring()
                 if USE_TRISTATE:  # Add absence of bits if using tristate
-                    sub_bits = sub_bits + (len(mask[field_id_int]) - len(sub_bits)) * 'x'
+                    sub_bits = sub_bits.decode('utf-8') + (len(mask[field_id_int]) - len(sub_bits)) * 'x'
 
                 fingerprint_bits.extend(sub_bits)  # Add bits to fingerprint profile
             elif field_id_int in unstable_elt_ids:  # This element ID is inherently unstable / variable and should be aggregated over *multiple* probes instead of just one.
@@ -1254,6 +1338,7 @@ def calculate_fingerprint_efficiency(dataset, mask, unstable_elt_ids):
 
         # Create the fingerprint based on all gathered fingerprint bits
         # fingerprint_bits = list(mac_addr)  # Control test; should give 100% COMMENT ME
+        fingerprint_bits = [item.encode('utf-8') for item in fingerprint_bits]
         fp_hash = Hash(fingerprint_bits, r.ts)
         fingerprints_per_mac.add_hash(r.mac_addr, fp_hash)
 
