@@ -270,6 +270,7 @@ elt_id_map = {
    TAG_VENDOR_SPECIFIC_IE:                   "Vendor Specific" ,
 }
 
+
 def human_readable_elt(elt_id):
     # Human readable elt_id?
     name = "Nonexistent"
